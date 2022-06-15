@@ -4,6 +4,8 @@ from __future__ import print_function
 import argparse
 import os
 import sys
+import multiprocessing as mp
+from functools import partial
 from tqdm import tqdm
 
 from mimic3benchmark.subject import read_stays, read_diagnoses, read_events, get_events_for_stay,\
@@ -21,12 +23,13 @@ parser.add_argument('--variable_map_file', type=str,
 parser.add_argument('--reference_range_file', type=str,
                     default=os.path.join(os.path.dirname(__file__), '../resources/variable_ranges.csv'),
                     help='CSV containing reference ranges for VARIABLEs.')
+parser.add_argument('--cores', type=int,
+                    default=-1,
+                    help='Number of cores to use for multiprocessing.')
 args, _ = parser.parse_known_args()
-
-var_map = read_itemid_to_variable_map(args.variable_map_file)
-variables = var_map.VARIABLE.unique()
-
-for subject_dir in tqdm(os.listdir(args.subjects_root_path), desc='Iterating over subjects'):
+              
+              
+def extract_episodes(subjects_root_path, var_map, variables, subject):
     dn = os.path.join(args.subjects_root_path, subject_dir)
     try:
         subject_id = int(subject_dir)
@@ -77,3 +80,10 @@ for subject_dir in tqdm(os.listdir(args.subjects_root_path), desc='Iterating ove
         episode = episode[columns_sorted]
         episode.to_csv(os.path.join(args.subjects_root_path, subject_dir, 'episode{}_timeseries.csv'.format(i+1)),
                        index_label='Hours')
+
+var_map = read_itemid_to_variable_map(args.variable_map_file)
+variables = var_map.VARIABLE.unique()
+pool = mp.Pool(processes=args.cores)
+subject_list = os.listdir(args.subjects_root_path)
+for _ in tqdm(pool.imap(partial(extract_episodes, args.subjects_root_path, var_map, variables), subject_list), total=len(subject_list), desc='Iterating over subjects'):
+    pass
